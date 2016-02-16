@@ -9,25 +9,58 @@ const jsig = jldsig.promises
 class Client {
 
   /**
+   * @param fetch
    * @param privateKeyPem
    * @param publicKeyUri
    */
-  constructor (privateKeyPem, publicKeyUri) {
+  constructor (fetch, privateKeyPem, publicKeyUri) {
+    this.fetch = fetch
     this.privateKeyPem = privateKeyPem
     this.publicKeyUri = publicKeyUri
   }
 
   /**
-   * @param document
+   * @param doc
    * @returns {Object}
    */
-  sign (document) {
-    return jsig.sign(document, {
+  sign (doc) {
+    return jsig.sign(doc, {
       privateKeyPem: this.privateKeyPem,
-      creator: this.publicKeyUri
+      creator: this.publicKeyUri,
+      algorithm: 'LinkedDataSignature2015'
     })
   }
 
+  /**
+   * @param doc
+   * @returns {Object}
+   */
+  verify (doc) {
+    let publicKey, publicKeyOwner
+    return jsonld.expand(doc)
+      .then((expanded) => {
+        let keyUri = expanded[0]['https://w3id.org/security#signature'][0]['http://purl.org/dc/terms/creator'][0]['@id']
+        return this.fetch(keyUri)
+      }).then((res) => {
+        return res.json()
+      }).then((key) => {
+        return jsonld.compact(key, 'https://w3id.org/security/v1')
+      }).then((compacted) => {
+        publicKey = compacted
+        return this.fetch(publicKey.owner)
+      }).then((res) => {
+        return res.json()
+      }).then((identity) => {
+        return jsonld.compact(identity[0], 'https://w3id.org/security/v1')
+      }).then((compacted) => {
+        publicKeyOwner = compacted
+        publicKeyOwner.publicKey = publicKey
+        return jsig.verify(doc, {
+          publicKey: publicKey,
+          publicKeyOwner: publicKeyOwner
+        })
+      })
+  }
 }
 
 export { Client as default }

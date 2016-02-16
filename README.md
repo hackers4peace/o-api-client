@@ -12,7 +12,7 @@
 
 ### common
 
-* fetch
+* node-fetch
+* jsonld
+* jsonld-signatures [rdf-ext issue](https://github.com/rdf-ext/discussions/issues/20)
 * rdf-ext
- * jsonld
- * n3
