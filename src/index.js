@@ -1,3 +1,5 @@
+import JsonldSerializer from 'rdf-serializer-jsonld'
+import JsonldParser from 'rdf-parser-jsonld'
 import jld from 'jsonld'
 import jldsig from 'jsonld-signatures'
 
@@ -5,6 +7,15 @@ jldsig.use('jsonld', jld)
 
 const jsonld = jld.promises
 const jsig = jldsig.promises
+
+const parsers = {
+  jsonld: new JsonldParser()
+}
+
+const serializers = {
+  jsonld: new JsonldSerializer()
+}
+
 
 class Client {
 
@@ -23,23 +34,34 @@ class Client {
    * @param doc
    * @returns {Object}
    */
-  sign (doc) {
-    return jsig.sign(doc, {
-      privateKeyPem: this.privateKeyPem,
-      creator: this.publicKeyUri,
-      algorithm: 'LinkedDataSignature2015'
-    })
+  sign (graph) {
+    return serializers.jsonld.serialize(graph)
+      .then((json) => {
+        return jsig.sign(json[0], {
+          privateKeyPem: this.privateKeyPem,
+          creator: this.publicKeyUri,
+          algorithm: 'LinkedDataSignature2015'
+        })
+      }).then((signedJson) => {
+        return parsers.jsonld.parse(signedJson)
+      })
   }
 
   /**
    * @param doc
    * @returns {Object}
    */
-  verify (doc) {
-    let publicKey, publicKeyOwner
-    return jsonld.expand(doc)
-      .then((expanded) => {
-        let keyUri = expanded[0]['https://w3id.org/security#signature'][0]['http://purl.org/dc/terms/creator'][0]['@id']
+  verify (graph) {
+    let doc, publicKey, publicKeyOwner
+    return serializers.jsonld.serialize(graph)
+      .then((json) => {
+        return jsonld.expand(json)
+      }).then((expanded) => {
+        let signature = expanded.find((entity) => { return entity['https://w3id.org/security#signatureValue'] })
+        doc = expanded.find((entity) => { return !entity['https://w3id.org/security#signatureValue'] })
+        delete signature['@id']
+        doc['https://w3id.org/security#signature'] = [ signature ]
+        let keyUri = signature['http://purl.org/dc/terms/creator'][0]['@id']
         return this.fetch(keyUri)
       }).then((res) => {
         return res.json()

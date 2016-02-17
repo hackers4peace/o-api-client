@@ -20,7 +20,9 @@
   "homepage": "https://github.com/hackers4peace/o-api-client#readme",
   "dependencies": {
     "jsonld": "^0.4.5",
-    "jsonld-signatures": "^1.1.5"
+    "jsonld-signatures": "^1.1.5",
+    "rdf-parser-jsonld": "^0.3.0",
+    "rdf-serializer-jsonld": "^0.3.0"
   },
   "devDependencies": {
     "babel-cli": "^6.4.0",
