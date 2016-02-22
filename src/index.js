@@ -1,12 +1,5 @@
 import JsonldSerializer from 'rdf-serializer-jsonld'
 import JsonldParser from 'rdf-parser-jsonld'
-import jld from 'jsonld'
-import jldsig from 'jsonld-signatures'
-
-jldsig.use('jsonld', jld)
-
-const jsonld = jld.promises
-const jsig = jldsig.promises
 
 const parsers = {
   jsonld: new JsonldParser()
@@ -20,14 +13,16 @@ const serializers = {
 class Client {
 
   /**
-   * @param fetch
-   * @param privateKeyPem
-   * @param publicKeyUri
+   * @param key { privPem: '', uri: '' }
+   * @param deps { forge: {}, jsonld: {}, jsigs: {} }
    */
-  constructor (fetch, privateKeyPem, publicKeyUri) {
-    this.fetch = fetch
-    this.privateKeyPem = privateKeyPem
-    this.publicKeyUri = publicKeyUri
+  constructor (key, deps) {
+    deps.jsigs.use('jsonld', deps.jsonld)
+    this.jsonld = deps.jsonld.promises
+    this.jsig = deps.jsigs.promises
+    this.fetch = deps.fetch
+    this.privateKeyPem = key.privPem
+    this.publicKeyUri = key.uri
   }
 
   /**
@@ -37,7 +32,7 @@ class Client {
   sign (graph) {
     return serializers.jsonld.serialize(graph)
       .then((json) => {
-        return jsig.sign(json[0], {
+        return this.jsig.sign(json[0], {
           privateKeyPem: this.privateKeyPem,
           creator: this.publicKeyUri,
           algorithm: 'LinkedDataSignature2015'
@@ -55,7 +50,7 @@ class Client {
     let doc, publicKey, publicKeyOwner
     return serializers.jsonld.serialize(graph)
       .then((json) => {
-        return jsonld.expand(json)
+        return this.jsonld.expand(json)
       }).then((expanded) => {
         let signature = expanded.find((entity) => { return entity['https://w3id.org/security#signatureValue'] })
         doc = expanded.find((entity) => { return !entity['https://w3id.org/security#signatureValue'] })
@@ -66,18 +61,18 @@ class Client {
       }).then((res) => {
         return res.json()
       }).then((key) => {
-        return jsonld.compact(key, 'https://w3id.org/security/v1')
+        return this.jsonld.compact(key, 'https://w3id.org/security/v1')
       }).then((compacted) => {
         publicKey = compacted
         return this.fetch(publicKey.owner)
       }).then((res) => {
         return res.json()
       }).then((identity) => {
-        return jsonld.compact(identity[0], 'https://w3id.org/security/v1')
+        return this.jsonld.compact(identity[0], 'https://w3id.org/security/v1')
       }).then((compacted) => {
         publicKeyOwner = compacted
         publicKeyOwner.publicKey = publicKey
-        return jsig.verify(doc, {
+        return this.jsig.verify(doc, {
           publicKey: publicKey,
           publicKeyOwner: publicKeyOwner
         })
