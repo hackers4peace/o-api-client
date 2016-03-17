@@ -1,6 +1,12 @@
+import rdf from 'rdf-ext'
 import JsonldSerializer from 'rdf-serializer-jsonld'
 import JsonldParser from 'rdf-parser-jsonld'
+// import clownface from 'clownface'
 
+/**
+ * TODO
+ * use new rdf.Parsers
+ */
 const parsers = {
   jsonld: new JsonldParser()
 }
@@ -9,6 +15,13 @@ const serializers = {
   jsonld: new JsonldSerializer()
 }
 
+const profile = new rdf.Profile()
+profile.setPrefix('ldp', 'http://www.w3.org/ns/ldp#')
+profile.setPrefix('rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#')
+
+function expand (termOrCurie) {
+  return profile.resolve(termOrCurie)
+}
 
 class Client {
 
@@ -23,6 +36,64 @@ class Client {
     this.fetch = deps.fetch
     this.privateKeyPem = key.privPem
     this.publicKeyUri = key.uri
+  }
+
+  /**
+   * currently assumes JSON-LD responses
+   * TODO: content negotiation application/ld+json & text/turtle
+   * @param resourceUrl
+   * @returns {Graph}
+   */
+  get (resourceUrl) {
+    return this.fetch(resourceUrl)
+      .then((response) => {
+        return { url: response.url, json: response.json() }
+      }).then(({ url, json }) => {
+        return { url: url, graph: parsers.jsonld.parse(json) }
+      })
+  }
+
+  /**
+   * @param resourceUrl
+   * @param triplePattern - to use with graph.match
+   * @returns {Array} - list of responses with parsed graphs
+   */
+
+  getRelated (resourceUrl, triplePattern) {
+    return this.fetchResource(resourceUrl)
+      .then(({ url, graph }) => {
+        return graph.match(triplePattern.subject, triplePattern.predicate, triplePattern.object)
+          .map(triple => triple.subject.nominalValue)
+          .map(this.fetchResource)
+      })
+  }
+
+  /**
+   * @param resourceUrl
+   * TODO: @param links - optional
+   * @returns {Array} - list of responses with parsed graphs
+   */
+  getReferencedContainers (resourceUrl) {
+    let triplePattern = {
+      subject: null,
+      predicate: expand('rdf:type'),
+      object: expand('ldp:IndirectContainer')
+    }
+    return this.fetchRelatedResources(resourceUrl, triplePattern)
+  }
+
+  /**
+   * @param containerUrl
+   * @returns {Array} - list of responses with parsed graphs
+   * TODO: handle paging
+   */
+  getContained (containerUrl) {
+    let triplePattern = {
+      subject: containerUrl,
+      predicate: expand('ldp:contains'),
+      object: null
+    }
+    return this.fetchRelatedResources(containerUrl, triplePattern)
   }
 
   /**

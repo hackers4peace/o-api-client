@@ -19,6 +19,8 @@
   },
   "homepage": "https://github.com/hackers4peace/o-api-client#readme",
   "dependencies": {
+    "clownface": "^0.3.0",
+    "rdf-ext": "^0.3.0",
     "rdf-parser-jsonld": "^0.3.0",
     "rdf-serializer-jsonld": "^0.3.0"
   },
