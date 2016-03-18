@@ -60,11 +60,13 @@ class Client {
    */
 
   getRelated (resourceUrl, triplePattern) {
-    return this.fetchResource(resourceUrl)
+    let variable = 'subject'
+    if (triplePattern.object == null) variable = 'object'
+    return this.get(resourceUrl)
       .then(({ url, graph }) => {
-        return graph.match(triplePattern.subject, triplePattern.predicate, triplePattern.object)
-          .map(triple => triple.subject.nominalValue)
-          .map(this.fetchResource)
+        return Promise.all(graph.match(triplePattern.subject, triplePattern.predicate, triplePattern.object)
+          .map(triple => triple[variable].nominalValue)
+          .map(this.get))
       })
   }
 
@@ -79,7 +81,7 @@ class Client {
       predicate: expand('rdf:type'),
       object: expand('ldp:IndirectContainer')
     }
-    return this.fetchRelatedResources(resourceUrl, triplePattern)
+    return this.getRelated(resourceUrl, triplePattern)
   }
 
   /**
@@ -87,13 +89,13 @@ class Client {
    * @returns {Array} - list of responses with parsed graphs
    * TODO: handle paging
    */
-  getContained (containerUrl) {
+  getAllContained (containerUrl) {
     let triplePattern = {
       subject: containerUrl,
       predicate: expand('ldp:contains'),
       object: null
     }
-    return this.fetchRelatedResources(containerUrl, triplePattern)
+    return this.getRelated(containerUrl, triplePattern)
   }
 
   /**
