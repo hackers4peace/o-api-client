@@ -23,33 +23,65 @@ function expand (termOrCurie) {
   return profile.resolve(termOrCurie)
 }
 
+function base (uri) {
+  return uri.replace(/#.*/, '')
+}
+
 class Client {
 
   /**
+   * @param store
    * @param key { privPem: '', uri: '' }
-   * @param deps { forge: {}, jsonld: {}, jsigs: {} }
+   * @param deps { fetch: function(), forge: {}, jsonld: {}, jsigs: {} }
    */
-  constructor (key, deps) {
-    deps.jsigs.use('jsonld', deps.jsonld)
-    this.jsonld = deps.jsonld.promises
-    this.jsig = deps.jsigs.promises
+  constructor (store, key, deps) {
+    if (deps.jsonld && deps.forge && deps.jsigs) {
+      deps.jsigs.use('jsonld', deps.jsonld)
+      this.jsonld = deps.jsonld.promises
+      this.jsig = deps.jsigs.promises
+    }
     this.fetch = deps.fetch
+    this.store = store
     this.privateKeyPem = key.privPem
     this.publicKeyUri = key.uri
   }
 
   /**
    * currently assumes JSON-LD responses
-   * TODO: content negotiation application/ld+json & text/turtle
    * @param resourceUrl
    * @returns {Graph}
+   * TODO:
+   * * content negotiation application/ld+json & text/turtle
    */
   get (resourceUrl) {
-    return this.fetch(resourceUrl)
+    let responseUrl
+    let error
+    let graph
+    return this.fetch(base(resourceUrl))
       .then((response) => {
-        return { url: response.url, json: response.json() }
-      }).then(({ url, json }) => {
-        return { url: url, graph: parsers.jsonld.parse(json) }
+        responseUrl = response.url
+        if (response.status === 200) {
+          return response.json()
+        } else {
+          error = response.status
+          return
+        }
+      }, (err) => {
+        error = err
+        return Promise.resolve()
+      }).then((json) => {
+        if (json) {
+          return parsers.jsonld.parse(json)
+        } else {
+          return
+        }
+      }).then((gr) => {
+        graph = gr
+        if (gr && this.store) {
+          return this.store.add(responseUrl, gr)
+        } else { return Promise.resolve() }
+      }).then(() => {
+        return { url: responseUrl, graph: graph, error: error }
       })
   }
 
@@ -66,7 +98,7 @@ class Client {
       .then(({ url, graph }) => {
         return Promise.all(graph.match(triplePattern.subject, triplePattern.predicate, triplePattern.object)
           .map(triple => triple[variable].nominalValue)
-          .map(this.get))
+          .map(this.get.bind(this)))
       })
   }
 
@@ -79,7 +111,7 @@ class Client {
     let triplePattern = {
       subject: null,
       predicate: expand('rdf:type'),
-      object: expand('ldp:IndirectContainer')
+      object: expand('ldp:DirectContainer') // TODO: change to IndirectContainer
     }
     return this.getRelated(resourceUrl, triplePattern)
   }
